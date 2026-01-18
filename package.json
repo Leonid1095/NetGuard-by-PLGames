@@ -22,13 +22,16 @@
     "electron-packager": "^17.1.2"
   },
   "dependencies": {
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "is-admin": "^3.0.0"
   },
   "build": {
     "appId": "com.plgames.netguard",
     "productName": "NetGuard",
     "win": {
-      "target": ["dir"],
+      "target": [
+        "dir"
+      ],
       "sign": null
     },
     "directories": {

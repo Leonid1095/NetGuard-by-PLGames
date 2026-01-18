@@ -1,5 +1,7 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, dialog, shell } = require('electron');
 const path = require('path');
+const { exec } = require('child_process');
+const isAdmin = require('is-admin');
 
 let mainWindow;
 let tray;
@@ -36,7 +38,27 @@ function createWindow() {
 }
 
 function createTray() {
-  tray = new Tray(path.join(__dirname, '../assets/icon.ico'));
+  // Используем nativeImage для создания простой иконки
+  const { nativeImage } = require('electron');
+  
+  // Создаём простую иконку 16x16 (минимальный размер для трея)
+  const iconPath = path.join(__dirname, '../renderer/icon.png');
+  let trayIcon;
+  
+  try {
+    // Пробуем загрузить существующую иконку
+    const fs = require('fs');
+    if (fs.existsSync(iconPath)) {
+      trayIcon = nativeImage.createFromPath(iconPath);
+    } else {
+      // Создаём пустую иконку если файла нет
+      trayIcon = nativeImage.createEmpty();
+    }
+  } catch (e) {
+    trayIcon = nativeImage.createEmpty();
+  }
+  
+  tray = new Tray(trayIcon);
   
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -124,4 +146,92 @@ ipcMain.on('window-close', () => {
   if (mainWindow) {
     mainWindow.emit('close');
   }
+});
+
+// Проверка прав администратора
+ipcMain.handle('check-admin', async () => {
+  return await isAdmin();
+});
+
+// Перезапуск с правами администратора
+ipcMain.handle('restart-as-admin', async () => {
+  try {
+    const exePath = process.execPath;
+    const args = process.argv.slice(1);
+    
+    // Закрываем текущее приложение
+    app.quit();
+    
+    // Запускаем новый экземпляр с правами администратора
+    shell.openExternal(`powershell -Command "Start-Process '${exePath}' -ArgumentList '${args.join(' ')}' -Verb RunAs"`);
+    
+    return true;
+  } catch (error) {
+    console.error('Failed to restart as admin:', error);
+    return false;
+  }
+});
+
+// Изменение DNS настроек
+ipcMain.handle('change-dns', async (event, dnsServers) => {
+  return new Promise((resolve, reject) => {
+    // Получаем имя активного сетевого адаптера
+    const getAdapterCmd = 'Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1 -ExpandProperty Name';
+    
+    exec(`powershell -Command "${getAdapterCmd}"`, (error, stdout, stderr) => {
+      if (error) {
+        console.error('Error getting adapter:', error);
+        resolve({ success: false, error: 'Не удалось найти активный сетевой адаптер' });
+        return;
+      }
+      
+      const adapterName = stdout.trim();
+      if (!adapterName) {
+        resolve({ success: false, error: 'Активный сетевой адаптер не найден' });
+        return;
+      }
+      
+      // Формируем команду для изменения DNS
+      const dnsAddresses = Array.isArray(dnsServers) ? dnsServers.join(',') : dnsServers;
+      const changeDnsCmd = `Set-DnsClientServerAddress -InterfaceAlias "${adapterName}" -ServerAddresses ${dnsAddresses}`;
+      
+      exec(`powershell -Command "${changeDnsCmd}"`, (error, stdout, stderr) => {
+        if (error) {
+          console.error('Error changing DNS:', error);
+          resolve({ success: false, error: 'Не удалось изменить DNS. Убедитесь что приложение запущено от имени администратора.' });
+          return;
+        }
+        
+        console.log('DNS changed successfully to:', dnsAddresses);
+        resolve({ success: true, adapter: adapterName, dns: dnsAddresses });
+      });
+    });
+  });
+});
+
+// Сброс DNS на автоматические
+ipcMain.handle('reset-dns', async () => {
+  return new Promise((resolve, reject) => {
+    const getAdapterCmd = 'Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1 -ExpandProperty Name';
+    
+    exec(`powershell -Command "${getAdapterCmd}"`, (error, stdout, stderr) => {
+      if (error) {
+        resolve({ success: false, error: 'Не удалось найти активный сетевой адаптер' });
+        return;
+      }
+      
+      const adapterName = stdout.trim();
+      const resetDnsCmd = `Set-DnsClientServerAddress -InterfaceAlias "${adapterName}" -ResetServerAddresses`;
+      
+      exec(`powershell -Command "${resetDnsCmd}"`, (error, stdout, stderr) => {
+        if (error) {
+          resolve({ success: false, error: 'Не удалось сбросить DNS' });
+          return;
+        }
+        
+        console.log('DNS reset to automatic');
+        resolve({ success: true });
+      });
+    });
+  });
 });

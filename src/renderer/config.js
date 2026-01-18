@@ -39,7 +39,8 @@ const CONFIG = {
           name: 'DNS-over-QUIC',
           platforms: ['Linux', 'Custom']
         },
-        ip: '1.1.1.1'
+        ip: '1.1.1.1',
+        ipSecondary: '1.0.0.1'
       },
       features: {
         en: ['Privacy focused', 'Fast worldwide', 'Free forever', 'All protocols'],
@@ -70,7 +71,8 @@ const CONFIG = {
           name: 'DNS-over-QUIC',
           platforms: ['Linux', 'Custom']
         },
-        ip: '94.140.14.14'
+        ip: '94.140.14.14',
+        ipSecondary: '94.140.15.15'
       },
       features: {
         en: ['Ad blocking', 'Malware protection', 'No logging', 'Family filter available'],
@@ -601,22 +603,10 @@ const CONFIG = {
 
   VIP_POOL: [
     {
-      id: 'vip_de',
-      name: { en: 'VIP Germany', ru: 'VIP Германия' },
-      url: 'https://vip-de.dnsshield.pro:9443',
-      flag: '🇩🇪'
-    },
-    {
-      id: 'vip_fr',
-      name: { en: 'VIP France', ru: 'VIP Франция' },
-      url: 'https://vip-fr.dnsshield.pro:9443',
-      flag: '🇫🇷'
-    },
-    {
-      id: 'vip_pl',
-      name: { en: 'VIP Poland', ru: 'VIP Польша' },
-      url: 'https://vip-pl.dnsshield.pro:9443',
-      flag: '🇵🇱'
+      id: 'vip_home',
+      name: { en: 'VIP Server', ru: 'VIP Сервер' },
+      url: 'https://home-vless.duckdns.org:9443',
+      flag: '⭐'
     }
   ],
 

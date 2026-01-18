@@ -252,6 +252,40 @@ body {
 .stat-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.6px; text-transform: uppercase; }
 .stat-divider { width: 1px; height: 26px; background: var(--border); }
 
+/* Switch DNS Button */
+.switch-dns-btn {
+  width: 100%;
+  max-width: 300px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 2px solid rgba(79, 163, 255, 0.3);
+  background: rgba(79, 163, 255, 0.1);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: none;
+}
+
+.switch-dns-btn:hover {
+  background: rgba(79, 163, 255, 0.2);
+  border-color: var(--accent);
+  box-shadow: 0 0 20px rgba(79, 163, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.switch-dns-btn:active {
+  transform: scale(0.98);
+}
+
+body.connected .switch-dns-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 .info-block {
   width: 100%;
   max-width: 320px;
@@ -423,3 +457,85 @@ body {
 ::-webkit-scrollbar-track { background: #0f1122; }
 ::-webkit-scrollbar-thumb { background: #2c2f46; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #3a3f5c; }
+
+/* Admin Dialog Styles */
+.admin-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.admin-dialog {
+  background: linear-gradient(160deg, #0f0f1e 0%, #14142b 35%, #1a1a2e 100%);
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  width: 400px;
+  max-width: 90vw;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.admin-dialog h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.admin-dialog p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.admin-dialog-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.admin-btn-cancel,
+.admin-btn-confirm {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.admin-btn-cancel {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+
+.admin-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent);
+}
+
+.admin-btn-confirm {
+  background: linear-gradient(135deg, #1e4dff 0%, #3bc8ff 100%);
+  color: white;
+  border-color: #7fd2ff;
+}
+
+.admin-btn-confirm:hover {
+  box-shadow: 0 0 20px rgba(79, 163, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.admin-btn-cancel:active,
+.admin-btn-confirm:active {
+  transform: scale(0.98);
+}

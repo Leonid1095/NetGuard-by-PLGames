@@ -3,10 +3,9 @@
 console.log('🚀 NetGuard renderer ready');
 
 // ===== GITHUB КОНФИГУРАЦИЯ =====
-// Замените YOUR_USERNAME и YOUR_REPO на ваши значения
 const GITHUB_CONFIG = {
-  username: 'YOUR_USERNAME',
-  repo: 'YOUR_REPO',
+  username: 'Leonid1095',
+  repo: 'NetGuard-by-PLGames',
   branch: 'main'
 };
 
@@ -35,11 +34,43 @@ const appState = {
   currentLang: localStorage.getItem('lang') || CONFIG.DEFAULT_LANG,
   stats: { queries: 0, blocked: 0, startTime: null },
   activeEndpoint: null,
+  currentDnsIndex: 0,
   settings: { ...defaultSettings }
 };
 
 function t(key) {
   return TRANSLATIONS[appState.currentLang]?.[key] || TRANSLATIONS.en[key] || key;
+}
+
+// Диалог для запроса прав администратора
+function showAdminDialog() {
+  return new Promise((resolve) => {
+    const dialog = document.createElement('div');
+    dialog.className = 'admin-dialog-overlay';
+    dialog.innerHTML = `
+      <div class="admin-dialog">
+        <h3>⚠️ Требуются права администратора</h3>
+        <p>Для изменения DNS-серверов требуются права администратора.</p>
+        <p>Перезапустить приложение с правами администратора?</p>
+        <div class="admin-dialog-buttons">
+          <button class="admin-btn-cancel">Отмена</button>
+          <button class="admin-btn-confirm">Перезапустить</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(dialog);
+    
+    dialog.querySelector('.admin-btn-cancel').onclick = () => {
+      document.body.removeChild(dialog);
+      resolve(false);
+    };
+    
+    dialog.querySelector('.admin-btn-confirm').onclick = () => {
+      document.body.removeChild(dialog);
+      resolve(true);
+    };
+  });
 }
 
 document.addEventListener('DOMContentLoaded', initApp);
@@ -292,6 +323,16 @@ function updateServerDisplay() {
 async function toggleConnection() {
   if (appState.isConnected) {
     logger.info('📴 Disconnecting');
+    
+    // Сбрасываем DNS на автоматический
+    if (window.api && window.api.resetDns) {
+      const resetResult = await window.api.resetDns();
+      if (!resetResult.success) {
+        logger.error('Failed to reset DNS:', resetResult.error);
+        showNotification('❌ ' + (resetResult.error || 'Не удалось сбросить DNS'), 'error');
+      }
+    }
+    
     appState.isConnected = false;
     appState.activeEndpoint = null;
     appState.stats = { queries: 0, blocked: 0, startTime: null };
@@ -304,6 +345,36 @@ async function toggleConnection() {
     logger.error('❌ Server not found', appState.currentServer);
     alert(t('noServerAvailable'));
     return;
+  }
+
+  // Проверка прав администратора перед подключением FREE DNS
+  if (server.id === FREE_POOL_ID) {
+    if (!window.api || !window.api.checkAdmin) {
+      showNotification('❌ Ошибка: API не доступен. Перезапустите приложение.', 'error');
+      logger.error('window.api not available');
+      return;
+    }
+    
+    try {
+      const isAdminUser = await window.api.checkAdmin();
+      
+      if (!isAdminUser) {
+        const result = await showAdminDialog();
+        if (result) {
+          // Пользователь согласился - перезапускаем с правами админа
+          await window.api.restartAsAdmin();
+          return;
+        } else {
+          // Пользователь отказался
+          showNotification('⚠️ Для изменения DNS требуются права администратора', 'warning');
+          return;
+        }
+      }
+    } catch (err) {
+      logger.error('Admin check failed:', err);
+      showNotification('❌ Ошибка проверки прав: ' + err.message, 'error');
+      return;
+    }
   }
 
   try {
@@ -328,24 +399,90 @@ async function connectFreePool() {
   
   for (let i = 0; i < list.length; i++) {
     const dns = list[i];
-    const endpoint = dns.protocols.doh?.url || dns.protocols.dot?.hostname || dns.protocols.ip;
-    if (!endpoint) {
-      logger.warn(`⏭️ Skipped ${dns.name} (no endpoint)`);
+    
+    // Извлекаем IP адрес из protocols.ip
+    const primaryIP = dns.protocols?.ip;
+    if (!primaryIP) {
+      logger.warn(`⏭️ Skipped ${dns.name} (no IP address)`);
       continue;
     }
-    logger.debug(`🔍 Pinging ${dns.name}`, endpoint);
-    const ok = await pingEndpoint(endpoint);
-    if (ok) {
+    
+    // Формируем массив DNS серверов (основной + вторичный если есть)
+    const dnsIPs = dns.protocols?.ipSecondary 
+      ? [primaryIP, dns.protocols.ipSecondary]
+      : [primaryIP];
+    
+    logger.debug(`🔍 Changing DNS to ${dns.name}`, dnsIPs);
+    
+    // Изменяем DNS через PowerShell
+    const result = await window.api.changeDns(dnsIPs);
+    
+    if (result.success) {
       appState.isConnected = true;
-      const proto = dns.protocols.doh ? 'DoH' : dns.protocols.dot ? 'DoT' : 'IP';
-      appState.activeEndpoint = `${dns.name} (${proto})`;
-      logger.info(`✅ Free DNS connected`, { name: dns.name, protocol: proto, attempt: i + 1 });
+      appState.activeEndpoint = `${dns.name} (${dnsIPs.join(', ')})`;
+      appState.currentDnsIndex = i;
+      logger.info(`✅ Free DNS connected`, { name: dns.name, ips: dnsIPs, adapter: result.adapter });
+      showNotification(`✅ DNS изменён: ${dns.name}`, 'success');
       return;
     }
-    logger.warn(`❌ ${dns.name} failed, trying next...`);
+    
+    logger.warn(`❌ ${dns.name} failed: ${result.error}, trying next...`);
   }
+  
   logger.error('🔴 All Free DNS endpoints failed');
-  throw new Error('Нет доступных публичных DNS');
+  throw new Error('Не удалось изменить DNS. Проверьте сетевое подключение.');
+}
+
+// Переключение на следующий DNS сервер
+async function switchToNextDNS() {
+  if (!appState.isConnected) {
+    showNotification('⚠️ Сначала подключитесь', 'warning');
+    return;
+  }
+  
+  const server = CONFIG.SERVERS.find(s => s.id === appState.currentServer);
+  if (server?.vip_only) {
+    showNotification('⚠️ Переключение DNS недоступно для VIP', 'warning');
+    return;
+  }
+  
+  // Переходим к следующему DNS
+  const nextIndex = (appState.currentDnsIndex + 1) % CONFIG.PUBLIC_DNS.length;
+  const dns = CONFIG.PUBLIC_DNS[nextIndex];
+  
+  if (!dns) {
+    showNotification('❌ Нет доступных DNS серверов', 'error');
+    return;
+  }
+  
+  const primaryIP = dns.protocols?.ip;
+  if (!primaryIP) {
+    showNotification('❌ DNS не имеет IP адреса', 'error');
+    return;
+  }
+  
+  const dnsIPs = dns.protocols?.ipSecondary 
+    ? [primaryIP, dns.protocols.ipSecondary]
+    : [primaryIP];
+  
+  logger.info(`🔄 Switching to ${dns.name}`, dnsIPs);
+  
+  try {
+    const result = await window.api.changeDns(dnsIPs);
+    
+    if (result.success) {
+      appState.currentDnsIndex = nextIndex;
+      appState.activeEndpoint = `${dns.name} (${dnsIPs.join(', ')})`;
+      updateStatusDisplay();
+      showNotification(`🔄 DNS переключён: ${dns.name}`, 'success');
+      logger.info(`✅ Switched to ${dns.name}`);
+    } else {
+      showNotification('❌ ' + (result.error || 'Ошибка переключения'), 'error');
+    }
+  } catch (err) {
+    showNotification('❌ Ошибка: ' + err.message, 'error');
+    logger.error('Switch DNS failed:', err);
+  }
 }
 
 async function connectVipAuto() {
@@ -449,6 +586,7 @@ function updateStatusDisplay() {
   const isVip = server?.vip_only;
 
   if (appState.isConnected) {
+    document.body.classList.add('connected');
     connectionCircle?.classList.remove('disconnected', 'connected-free', 'connected-vip');
     connectionCircle?.classList.add(isVip ? 'connected-vip' : 'connected-free');
     if (statusIcon) statusIcon.textContent = isVip ? '👑' : '✓';
@@ -456,6 +594,7 @@ function updateStatusDisplay() {
     if (statusSub) statusSub.textContent = appState.activeEndpoint || 'Connected';
     if (activeEndpointEl) activeEndpointEl.textContent = appState.activeEndpoint || 'Active';
   } else {
+    document.body.classList.remove('connected');
     connectionCircle?.classList.remove('connected-free', 'connected-vip');
     connectionCircle?.classList.add('disconnected');
     if (statusIcon) statusIcon.textContent = '⚡';
