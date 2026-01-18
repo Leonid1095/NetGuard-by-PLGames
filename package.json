@@ -1,0 +1,38 @@
+{
+  "name": "netguard",
+  "version": "1.0.0",
+  "description": "🌐 NetGuard by PLGames - DNS без компромиссов. Быстро, безопасно, без ограничений.",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:unpacked": "electron-packager . NetGuard --platform=win32 --arch=x64 --out=dist --overwrite",
+    "build": "electron-packager . NetGuard --platform=win32 --arch=x64 --out=dist --overwrite --asar",
+    "release": "npm run build && echo 'Build complete. Create GitHub release manually.'"
+  },
+  "keywords": [
+    "dns",
+    "security",
+    "electron"
+  ],
+  "author": "PLGames",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "electron-packager": "^17.1.2"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "build": {
+    "appId": "com.plgames.netguard",
+    "productName": "NetGuard",
+    "win": {
+      "target": ["dir"],
+      "sign": null
+    },
+    "directories": {
+      "output": "dist"
+    }
+  }
+}
